@@ -1,8 +1,10 @@
-# PrivHound
+# PrivHound-BOF
 
 **Local Privilege Escalation, as a Graph.**
 
 A BloodHound OpenGraph collector that models Windows local privilege escalation as interconnected attack paths not a wall of text.
+
+> **Project origin:** PrivHound-BOF is an independent, BOF-focused continuation of [dazzyddos/PrivHound](https://github.com/dazzyddos/PrivHound). The original PowerShell collector and its contributors remain credited in the preserved Git history.
 
 ---
 
