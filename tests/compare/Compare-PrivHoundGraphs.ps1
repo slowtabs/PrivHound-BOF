@@ -4,12 +4,24 @@ param(
     [Parameter(Mandatory)] [string]$CandidatePath,
     [string[]]$NodeKinds = @(
         'PHUser','PHPrivTarget','PHEndpoint','PHTokenPrivilege','PHService',
-        'PHUnquotedPath','PHWritablePath','PHRegistryMisconfig','PHUACBypass'
+        'PHUnquotedPath','PHWritablePath','PHRegistryMisconfig','PHUACBypass',
+        'PHScheduledTask','PHAutoRun','PHWritableRegKey','PHStoredCredential',
+        'PHGPPPassword','PHUnattendFile','PHPSHistory','PHSensitiveFile',
+        'PHWritableProgramDir','PHUserProfile','PHJITAdminTool','PHPrintSpooler',
+        'PHWSUSConfig','PHSCCMCredential','PHCOMHijack','PHNamedPipe',
+        'PHCachedCreds','PHWMISubscription','PHWebClientRelay','PHShadowCopy'
     ),
     [string[]]$EdgeKinds = @(
         'PHHosts','PHHasSessionOn','PHHasPrivilege','PHCanEscalateTo','PHRunsAs',
         'PHCanModifyService','PHCanWriteBinary','PHCanHijackPath','PHCanWriteTo',
-        'PHCanExploit','PHEscalatesTo','PHCanBypassUAC'
+        'PHCanExploit','PHEscalatesTo','PHCanBypassUAC','PHCanWriteTaskBinary',
+        'PHCanWriteAutorun','PHCanModifyRegKey','PHHasStoredCreds','PHCanReadCreds',
+        'PHCanDecryptGPP','PHCanReadHistory','PHCanAccessFile','PHCanWriteProgDir',
+        'PHCanAccessProfile','PHProfileContains','PHContainsCreds','PHCanRequestJIT',
+        'PHGrantsTempAdmin','PHObservedSpoolerPolicy','PHCanExploitWSUS','PHCanReadNAA',
+        'PHCanOverrideCOM','PHCanConnectPipe','PHHasCachedCreds','PHCachedLogonsConfigured',
+        'PHCanModifyWMI','PHCanRelayWebClient','PHCanWriteRecoveryBin',
+        'PHCanAccessShadowCopy','PHContainsSensitiveFile','PHCanExtractHashes','PHHostsBinaryFor'
     )
 )
 

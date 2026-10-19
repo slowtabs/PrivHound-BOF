@@ -76,14 +76,14 @@ foreach ($name in $requiredImports) {
 }
 
 $unexpected = @($undefined | Where-Object {
-    $_ -notmatch '(KERNEL32|ADVAPI32|NTDLL)\$[A-Za-z0-9_]+' -and $_ -notmatch 'BeaconOutput'
+    $_ -notmatch '(KERNEL32|ADVAPI32|NTDLL|OLE32|OLEAUT32|NETAPI32|CRYPT32|WLANAPI)\$[A-Za-z0-9_]+' -and $_ -notmatch 'BeaconOutput'
 })
 if ($unexpected.Count -gt 0) {
     throw "BOF contains unresolved imports that do not use Beacon DFR naming: $($unexpected -join '; ')"
 }
 
 $directDfr = @($undefined | Where-Object {
-    $_ -match '(KERNEL32|ADVAPI32|NTDLL)\$[A-Za-z0-9_]+' -and $_ -notmatch '__imp_'
+    $_ -match '(KERNEL32|ADVAPI32|NTDLL|OLE32|OLEAUT32|NETAPI32|CRYPT32|WLANAPI)\$[A-Za-z0-9_]+' -and $_ -notmatch '__imp_'
 })
 if ($directDfr.Count -gt 0) {
     throw "BOF contains direct DFR calls instead of import-pointer symbols: $($directDfr -join '; ')"

@@ -1,50 +1,50 @@
-# BOF feature-parity roadmap
+# BOF feature parity
 
-The PowerShell collector currently exposes 29 checks. BOF parity is being delivered in cohesive, testable iterations so shared native primitives are validated before more checks depend on them.
+The native x64 collector implements all 29 PowerShell check families. `implemented` means the native collector builds and passes local NDJSON/OpenGraph validation. `accepted` additionally means the positive lab fixture has been exercised from the intended non-elevated VM account.
 
-Legend: `done` is implemented and covered by local structural validation; `accepted` has also passed its positive VM fixture; `planned` is not implemented yet.
-
-| PowerShell check | BOF status | Planned iteration |
+| PowerShell check | BOF status | Delivery |
 |---|---:|---:|
 | WeakServicePermissions | accepted | 1 |
 | UnquotedServicePaths | accepted | 2 |
 | DLLHijacking | accepted | 2 |
 | AlwaysInstallElevated | accepted | 2 |
-| TokenPrivileges | done | 1 |
-| ScheduledTasks | planned | 3 |
-| AutoRuns | planned | 3 |
-| ServiceRegistryKeys | planned | 3 |
-| StoredCredentials | planned | 4 |
-| GPPPasswords | planned | 4 |
-| UnattendFiles | planned | 4 |
-| PSHistory | planned | 4 |
-| SensitiveFiles | planned | 4 |
+| TokenPrivileges | implemented | 1 |
+| ScheduledTasks | implemented | 3 |
+| AutoRuns | implemented | 3 |
+| ServiceRegistryKeys | implemented | 3 |
+| StoredCredentials | implemented | 4 |
+| GPPPasswords | implemented | 4 |
+| UnattendFiles | implemented | 4 |
+| PSHistory | implemented | 4 |
+| SensitiveFiles | implemented | 4 |
 | UACBypass | accepted | 2 |
-| WritableProgramDirs | planned | 3 |
-| CrossUserProfiles | planned | 5 |
-| CredentialLoginPaths | planned | 5 |
-| CrossUserPrivileges | planned | 5 |
-| JITAdminTools | planned | 5 |
-| PrintSpooler | planned | 6 |
-| WSUSConfig | planned | 6 |
-| SCCMCredentials | planned | 4 |
-| COMHijacking | planned | 6 |
-| NamedPipePermissions | planned | 6 |
-| CachedCredentials | planned | 5 |
-| WMISubscriptions | planned | 6 |
-| WebClientRelay | planned | 6 |
-| ServiceRecoveryActions | planned | 3 |
-| ShadowCopyFiles | planned | 6 |
+| WritableProgramDirs | implemented | 3 |
+| CrossUserProfiles | implemented | 5 |
+| CredentialLoginPaths | implemented, opt-in | 5 |
+| CrossUserPrivileges | implemented, opt-in | 5 |
+| JITAdminTools | implemented | 5 |
+| PrintSpooler | implemented | 6 |
+| WSUSConfig | implemented | 6 |
+| SCCMCredentials | implemented | 4 |
+| COMHijacking | implemented | 6 |
+| NamedPipePermissions | implemented | 6 |
+| CachedCredentials | implemented | 5 |
+| WMISubscriptions | implemented | 6 |
+| WebClientRelay | implemented | 6 |
+| ServiceRecoveryActions | implemented | 3 |
+| ShadowCopyFiles | implemented | 6 |
 
-## Iteration acceptance
+## Safety differences
 
-Each iteration must pass:
+The default BOF is metadata-only and does not emit recovered passwords, WiFi keys, GPP plaintext, Credential Manager blobs, or other secret values. Secret buffers used by an explicitly requested credential-validation run are wiped before release.
 
-1. x64 MSVC compilation and BOF import/entry-point inspection;
-2. standalone harness execution without collector errors;
-3. NDJSON-to-OpenGraph conversion and schema/ID validation;
-4. positive assertions against `lab/Setup-VulnLab.ps1` from a non-elevated `PHLabUser` session;
-5. PowerShell-versus-BOF graph comparison for the checks in that iteration;
-6. direct execution with an authorized x64 BOF loader or Beacon in the disposable VM.
+Authentication is disabled by default:
 
-Credential discovery and validation will need explicit runtime controls before Iterations 4 and 5. The default BOF should not emit plaintext passwords, and active credential validation should remain opt-in because it creates authentication events and can trigger account lockout policy.
+- `validate-creds` tests a recovered credential only against its claimed local username.
+- `spray-creds` additionally tests recovered passwords across enabled local accounts. It can create many authentication events and trigger lockout policy.
+
+Candidate-only checks retain explicit verification properties. COM registration, named-pipe connectivity, JIT-tool presence, SCCM policy presence, and relay prerequisites are not represented as proof of exploitation.
+
+## Remaining acceptance work
+
+Full implementation is complete, but Iterations 3–6 still require positive VM acceptance. Each acceptance run must pass the build inspection, standalone harness, conversion and graph validator, fixture assertions, PowerShell comparison, and direct x64 COFF-loader or Beacon test described in `TESTING.md`.

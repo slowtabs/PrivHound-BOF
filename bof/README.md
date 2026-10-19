@@ -1,30 +1,12 @@
-# PrivHound BOF — Iteration 2
+# PrivHound x64 BOF
 
-This directory contains the second native vertical slice of PrivHound:
+This directory contains the native x64 BOF implementation of all 29 PrivHound PowerShell check families. It emits newline-delimited JSON (NDJSON), which `scripts/Convert-PrivHoundNdjson.ps1` converts to BloodHound OpenGraph JSON.
 
-- host and current-user graph nodes;
-- dangerous token-privilege collection;
-- Windows service enumeration;
-- service configuration and service-binary candidates;
-- exploitable unquoted service paths;
-- writable process `PATH` directories with machine/user scope;
-- AlwaysInstallElevated policy detection;
-- UAC policy and filtered-token observations;
-- a standalone Windows harness;
-- a Cobalt Strike BOF entry point named `go`.
-
-The collector is read-only. It does not exploit findings, change services, validate credentials, or create persistence.
+The default mode is read-only and metadata-only. It does not exploit findings, modify configuration, establish persistence, or emit plaintext secrets. Credential validation and password-reuse testing are separate explicit modes because they generate authentication events and may interact with account-lockout policy.
 
 ## Build
 
-From the repository root, on a Windows machine with MinGW or a compatible GCC:
-
-```powershell
-.\bof\build.ps1                 # x64 BOF (requires an x64 compiler)
-.\bof\build.ps1 -Arch x86       # compiler experiment; not a supported BOF artifact
-```
-
-Alternatively, from an x64 Native Tools Command Prompt for Visual Studio (recommended for the x64 iteration artifact):
+From an x64 Native Tools Command Prompt for Visual Studio:
 
 ```bat
 bof\build-msvc.bat
@@ -37,29 +19,58 @@ bof\build\privhound.x64.bof.o
 bof\build\privhound_harness.exe
 ```
 
-The `.o` file is the BOF artifact. The harness is for local testing without Cobalt Strike.
+The `.o` file is the BOF artifact. The harness runs the same collection core without Cobalt Strike. The build also inspects the BOF architecture, `go` entry point, Beacon imports, and Dynamic Function Resolution symbols.
 
-The relocatable link intentionally uses the toolchain linker directly so C runtime startup code is not added to the BOF. Inspect a built artifact with:
+MinGW-w64 is also supported:
 
 ```powershell
-.\tests\Inspect-PrivHoundBof.ps1 -BofPath .\bof\build\privhound.x64.bof.o -Architecture x64
+.\bof\build.ps1
 ```
 
-## Run the harness
+## Run and convert
+
+Safe metadata-only collection:
 
 ```powershell
 .\bof\build\privhound_harness.exe -o C:\PrivHoundTest\bof.ndjson
+.\scripts\Convert-PrivHoundNdjson.ps1 `
+  -InputPath C:\PrivHoundTest\bof.ndjson `
+  -OutputPath C:\PrivHoundTest\bof.json `
+  -FindingsPath C:\PrivHoundTest\bof_findings.json
+.\tests\Validate-PrivHoundOutput.ps1 `
+  -NdjsonPath C:\PrivHoundTest\bof.ndjson `
+  -OpenGraphPath C:\PrivHoundTest\bof.json
 ```
 
-The output is newline-delimited JSON records. It is intentionally an intermediate format so the BOF does not need to allocate one large BloodHound document inside Beacon.
+Explicit credential modes:
 
-## BOF integration
+```powershell
+# Test each recovered credential only against its claimed local username.
+.\bof\build\privhound_harness.exe --validate-credentials -o C:\PrivHoundTest\validated.ndjson
 
-Build the artifact at `bof\build\privhound.x64.bof.o`, load `scripts\privhound.cna` in an authorized Cobalt Strike lab, and run the registered `privhound` command from a Beacon console.
+# Also test recovered passwords against enabled local users. Review lockout policy first.
+.\bof\build\privhound_harness.exe --spray-credentials -o C:\PrivHoundTest\spray.ndjson
+```
 
-Iteration 2 supports x64 Beacon sessions. The Aggressor wrapper refuses x86 sessions. Test in a disposable VM because a BOF executes inside Beacon and a native crash can affect that session.
+No recovered secret is written to NDJSON in either mode.
 
-This is not full `PrivHound.ps1` parity yet. This iteration groups checks that reuse service, registry, environment, and filesystem ACL primitives. Later iterations will add tasks, autoruns, credential artifacts, user/profile relationships, and the remaining host-policy checks.
+## Beacon commands
 
-See [`PARITY.md`](PARITY.md) for the per-check implementation status and iteration plan.
+Load `scripts/privhound.cna`, then use:
 
+```text
+privhound                 # safe metadata-only mode
+privhound_validate_creds  # claimed-user validation
+privhound_spray_creds     # cross-account reuse testing
+```
+
+Only use the last two in an authorized disposable lab. The wrapper currently supports x64 Beacon sessions.
+
+## Coverage and testing
+
+- `PARITY.md` tracks all check families and their acceptance status.
+- `TESTING.md` contains the clean-VM setup, safe and active test flows, conversion, validation, comparison, and cleanup procedure.
+- `tests/Inspect-PrivHoundBof.ps1` validates the COFF object.
+- `tests/Validate-PrivHoundOutput.ps1` validates record structure, IDs, edge endpoints, and converted graph counts.
+
+The native implementation uses Windows APIs directly. It does not spawn PowerShell, `sc.exe`, `schtasks.exe`, `netsh.exe`, or `vssadmin.exe`.

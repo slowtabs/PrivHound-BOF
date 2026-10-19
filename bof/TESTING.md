@@ -1,92 +1,132 @@
-# Iteration 2 testing
+# Full BOF acceptance testing
 
-Run the lab only in a disposable Windows VM. Take a clean snapshot before running the lab setup script. Do not run the vulnerable lab on a production or daily-use machine.
+Use a disposable Windows 10/11 x64 VM and take a clean snapshot first. The lab setup intentionally creates vulnerable services, registry policy, files, scheduled tasks, and other escalation fixtures. Do not run it on a daily-use or production computer.
 
-## Toolchain check
+## 1. Build on the development machine
 
-The recommended build uses Visual Studio C++ Build Tools. From an **x64 Native Tools Command Prompt for Visual Studio**:
+From an x64 Native Tools Command Prompt for Visual Studio:
 
 ```bat
 bof\build-msvc.bat
 ```
 
-That command builds and inspects the x64 BOF and also creates the standalone x64 harness used below.
+Copy these items to the VM:
 
-An x64 MinGW-w64 toolchain is also supported. Its machine name must contain `x86_64` or `amd64`:
-
-```powershell
-gcc -dumpmachine
-.\bof\build.ps1
-.\tests\Inspect-PrivHoundBof.ps1 -BofPath .\bof\build\privhound.x64.bof.o -Architecture x64
+```text
+bof\build\privhound.x64.bof.o
+bof\build\privhound_harness.exe
+lab\Setup-VulnLab.ps1
+lab\Teardown-VulnLab.ps1
+scripts\Convert-PrivHoundNdjson.ps1
+tests\Validate-PrivHoundOutput.ps1
+tests\Assert-Iteration1Lab.ps1
+tests\Assert-Iteration2Lab.ps1
+tests\Assert-Iteration3Lab.ps1
+tests\Assert-Iteration4Lab.ps1
+tests\Assert-FullParityLab.ps1
+PrivHound.ps1
 ```
 
-If the compiler reports `mingw32`, use it only for compiler/harness experiments. Its x86 object is not an Iteration 2 release artifact:
+## 2. Create the lab fixtures
 
-```powershell
-.\bof\build.ps1 -Arch x86
-```
-
-## Reference collection
-
-From an elevated PowerShell window in the VM:
+In an elevated PowerShell window inside the VM:
 
 ```powershell
 Set-ExecutionPolicy -Scope Process Bypass
 .\lab\Setup-VulnLab.ps1
 ```
 
-Confirm the prompt with `YES`, then use the test account printed by the setup script. Run the reference collector from a non-elevated test-user PowerShell:
+Confirm with `YES`. Then sign in as the non-elevated `PHLabUser` printed by the setup script. All comparison runs must use that same account and token elevation state.
+
+## 3. Safe metadata-only run
 
 ```powershell
 New-Item -ItemType Directory -Path C:\PrivHoundTest -Force | Out-Null
-.\PrivHound.ps1 `
-    -NoCredTest `
-    -OutputPath C:\PrivHoundTest\powershell.json `
-    -FindingsPath C:\PrivHoundTest\powershell_findings.json
-```
-
-## Harness collection
-
-After building with one of the supported x64 toolchains above, run the same slice without Cobalt Strike:
-
-```powershell
-.\bof\build\privhound_harness.exe `
-    -o C:\PrivHoundTest\bof.ndjson
+.\bof\build\privhound_harness.exe -o C:\PrivHoundTest\bof-safe.ndjson
 .\scripts\Convert-PrivHoundNdjson.ps1 `
-    -InputPath C:\PrivHoundTest\bof.ndjson `
-    -OutputPath C:\PrivHoundTest\bof.json `
-    -FindingsPath C:\PrivHoundTest\bof_findings.json
+  -InputPath C:\PrivHoundTest\bof-safe.ndjson `
+  -OutputPath C:\PrivHoundTest\bof-safe.json `
+  -FindingsPath C:\PrivHoundTest\bof-safe-findings.json
 .\tests\Validate-PrivHoundOutput.ps1 `
-    -NdjsonPath C:\PrivHoundTest\bof.ndjson `
-    -OpenGraphPath C:\PrivHoundTest\bof.json
+  -NdjsonPath C:\PrivHoundTest\bof-safe.ndjson `
+  -OpenGraphPath C:\PrivHoundTest\bof-safe.json
+.\tests\Assert-FullParityLab.ps1 `
+  -GraphPath C:\PrivHoundTest\bof-safe.json
 ```
 
-Compare the supported graph contract:
+The safe output must contain no plaintext fixture passwords. A quick regression check is:
 
 ```powershell
-.\tests\compare\Compare-PrivHoundGraphs.ps1 `
-    -ReferencePath C:\PrivHoundTest\powershell.json `
-    -CandidatePath C:\PrivHoundTest\bof.json
-.\tests\Assert-Iteration2Lab.ps1 `
-    -GraphPath C:\PrivHoundTest\bof.json
+Select-String C:\PrivHoundTest\bof-safe.ndjson `
+  -Pattern @('PHLab_P@ssw0rd_TEST','PHLabXPriv_S3cret!','AdminFakeToken789') `
+  -SimpleMatch
 ```
 
-Iteration 2 acceptance expects `PHLabUnquotedSvc`, `C:\PrivHoundLab\FakePath`, both AlwaysInstallElevated policy values, and the no-prompt UAC policy created by the lab setup. Run the harness or BOF as the non-elevated `PHLabUser`; an elevated token intentionally suppresses writable-ACL escalation candidates.
+The command should return no matches.
 
-## Cobalt Strike acceptance test
+## 4. Opt-in claimed-user validation
 
-Only in an authorized Cobalt Strike lab:
+This mode calls `LogonUser` and creates authentication events. Use it only after confirming that the lab accounts cannot be locked out:
 
-1. Build `bof\build\privhound.x64.bof.o` (Iteration 2 requires an x64 Beacon).
-2. Load `scripts\privhound.cna`.
-3. Run `privhound` from a Beacon console with a matching built artifact.
-4. Confirm the callback saves an `.ndjson` file.
-5. Convert that file with `Convert-PrivHoundNdjson.ps1`.
-6. Validate and compare the resulting graph.
+```powershell
+.\bof\build\privhound_harness.exe --validate-credentials `
+  -o C:\PrivHoundTest\bof-validated.ndjson
+.\scripts\Convert-PrivHoundNdjson.ps1 `
+  -InputPath C:\PrivHoundTest\bof-validated.ndjson `
+  -OutputPath C:\PrivHoundTest\bof-validated.json
+.\tests\Validate-PrivHoundOutput.ps1 `
+  -NdjsonPath C:\PrivHoundTest\bof-validated.ndjson `
+  -OpenGraphPath C:\PrivHoundTest\bof-validated.json
+.\tests\Assert-FullParityLab.ps1 `
+  -GraphPath C:\PrivHoundTest\bof-validated.json `
+  -RequireCredentialPaths
+```
 
-The BOF does enumeration only. Do not test by exploiting the findings during this iteration.
+`--validate-credentials` tests only a recovered credential's claimed local username. `--spray-credentials` additionally checks password reuse across enabled local users and should be reserved for the isolated lab after reviewing lockout policy.
 
-## Cleanup
+## 5. PowerShell comparison
+
+Generate a non-authenticating reference graph:
+
+```powershell
+.\PrivHound.ps1 -NoCredTest `
+  -OutputPath C:\PrivHoundTest\powershell.json `
+  -FindingsPath C:\PrivHoundTest\powershell-findings.json
+.\tests\compare\Compare-PrivHoundGraphs.ps1 `
+  -ReferencePath C:\PrivHoundTest\powershell.json `
+  -CandidatePath C:\PrivHoundTest\bof-safe.json
+```
+
+Counts do not need to be byte-for-byte identical: native checks deliberately preserve candidate/verification properties and never emit secrets. Investigate missing expected fixture nodes or dangling edges.
+
+## 6. Direct BOF-loader or Beacon test
+
+With the Ap3x loader in the same VM directory:
+
+```powershell
+$records = & .\COFFLoader.exe go .\privhound.x64.bof.o 2>&1 |
+  ForEach-Object { "$_" } |
+  Where-Object { $_ -match '^\{"type":' }
+[IO.File]::WriteAllLines(
+  (Join-Path $PWD 'bof-loader.ndjson'),
+  [string[]]$records,
+  [Text.UTF8Encoding]::new($false)
+)
+```
+
+Convert and validate `bof-loader.ndjson` as above. Loader argument conventions differ; use the harness or the Aggressor commands for credential-mode acceptance if the loader cannot pass raw arguments.
+
+With `scripts\privhound.cna` loaded in an authorized x64 Beacon:
+
+```text
+privhound
+privhound_validate_creds
+privhound_spray_creds
+```
+
+The latter two commands are explicit active-authentication modes.
+
+## 7. Cleanup
 
 From an elevated PowerShell window:
 
@@ -95,4 +135,3 @@ From an elevated PowerShell window:
 ```
 
 If teardown reports incomplete cleanup, revert the VM snapshot.
-

@@ -8,6 +8,57 @@ static int ph_strlen(const char *s) {
     return n;
 }
 
+typedef struct _PH_SEEN_KEY {
+    struct _PH_SEEN_KEY *next;
+    char value[192];
+} PH_SEEN_KEY;
+
+static int ph_streq(const char *a, const char *b) {
+    int i = 0;
+    if (!a || !b) return a == b;
+    while (a[i] && b[i]) {
+        if (a[i] != b[i]) return 0;
+        i++;
+    }
+    return a[i] == b[i];
+}
+
+static void ph_key_copy(char *out, int capacity, const char *value) {
+    int i = 0;
+    if (!out || capacity <= 0) return;
+    if (!value) value = "";
+    while (value[i] && i + 1 < capacity) { out[i] = value[i]; i++; }
+    out[i] = 0;
+}
+
+static int ph_seen_or_add(void **head_ptr, const char *value) {
+    PH_SEEN_KEY *item;
+    if (!head_ptr || !value) return 0;
+    item = (PH_SEEN_KEY *)(*head_ptr);
+    while (item) {
+        if (ph_streq(item->value, value)) return 1;
+        item = item->next;
+    }
+    item = (PH_SEEN_KEY *)HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, sizeof(PH_SEEN_KEY));
+    if (!item) return 0;
+    ph_key_copy(item->value, sizeof(item->value), value);
+    item->next = (PH_SEEN_KEY *)(*head_ptr);
+    *head_ptr = item;
+    return 0;
+}
+
+static void ph_seen_free(void **head_ptr) {
+    PH_SEEN_KEY *item;
+    if (!head_ptr) return;
+    item = (PH_SEEN_KEY *)(*head_ptr);
+    while (item) {
+        PH_SEEN_KEY *next = item->next;
+        HeapFree(GetProcessHeap(), 0, item);
+        item = next;
+    }
+    *head_ptr = NULL;
+}
+
 #ifdef _MSC_VER
 #define PH_NOINLINE __declspec(noinline)
 #else
@@ -255,6 +306,7 @@ static void ph_emit_json(PH_GRAPH *graph, PH_JSON *json) {
 void ph_emit_node(PH_GRAPH *graph, const char *id, const char *kinds_json, const char *properties_json) {
     char line[16384];
     PH_JSON j;
+    if (graph && ph_seen_or_add(&graph->seen_nodes, id)) return;
     ph_json_init(&j, line, sizeof(line)); ph_json_start_object(&j);
     ph_json_add_string(&j, "type", "node"); ph_json_add_string(&j, "id", id);
     ph_json_add_raw(&j, "kinds", kinds_json); ph_json_add_raw(&j, "properties", properties_json);
@@ -263,10 +315,34 @@ void ph_emit_node(PH_GRAPH *graph, const char *id, const char *kinds_json, const
 
 void ph_emit_edge(PH_GRAPH *graph, const char *start, const char *end, const char *kind, const char *properties_json) {
     char line[8192];
+    char contextual_properties[4096];
+    char edge_key[192];
+    int at = 0;
+    const char *effective_properties = properties_json;
     PH_JSON j;
+    edge_key[0] = 0;
+    for (int i = 0; start && start[i] && at + 1 < (int)sizeof(edge_key); i++) edge_key[at++] = start[i];
+    if (at + 1 < (int)sizeof(edge_key)) edge_key[at++] = '|';
+    for (int i = 0; end && end[i] && at + 1 < (int)sizeof(edge_key); i++) edge_key[at++] = end[i];
+    if (at + 1 < (int)sizeof(edge_key)) edge_key[at++] = '|';
+    for (int i = 0; kind && kind[i] && at + 1 < (int)sizeof(edge_key); i++) edge_key[at++] = kind[i];
+    edge_key[at] = 0;
+    if (graph && ph_seen_or_add(&graph->seen_edges, edge_key)) return;
+    if (graph && graph->credential_context) {
+        int length = ph_strlen(properties_json); int written = 0; volatile char *write = contextual_properties;
+        if (length >= 2 && properties_json[0] == '{' && properties_json[length - 1] == '}') {
+            for (int i = 0; i < length - 1 && written + 32 < (int)sizeof(contextual_properties); i++) write[written++] = properties_json[i];
+            if (written > 1) write[written++] = ',';
+            {
+                static const char marker[] = "\"discovered_via\":\"credential\"}";
+                for (int i = 0; marker[i] && written + 1 < (int)sizeof(contextual_properties); i++) write[written++] = marker[i];
+            }
+            write[written] = 0; effective_properties = contextual_properties;
+        }
+    }
     ph_json_init(&j, line, sizeof(line)); ph_json_start_object(&j);
     ph_json_add_string(&j, "type", "edge"); ph_json_add_string(&j, "start", start); ph_json_add_string(&j, "end", end);
-    ph_json_add_string(&j, "kind", kind); ph_json_add_raw(&j, "properties", properties_json);
+    ph_json_add_string(&j, "kind", kind); ph_json_add_raw(&j, "properties", effective_properties);
     ph_json_end_object(&j); ph_emit_json(graph, &j); if (graph) graph->edge_count++;
 }
 
@@ -292,5 +368,11 @@ void ph_graph_init(PH_GRAPH *graph, PH_EMIT_FN emit, void *context) {
     ph_zero(graph, sizeof(*graph));
     graph->emit = emit;
     graph->emit_context = context;
+}
+
+void ph_graph_dispose(PH_GRAPH *graph) {
+    if (!graph) return;
+    ph_seen_free(&graph->seen_nodes);
+    ph_seen_free(&graph->seen_edges);
 }
 

@@ -33,9 +33,9 @@ PrivHound currently has two collectors:
 | Collector | Status | Coverage |
 |---|---|---|
 | `PrivHound.ps1` | Full collector | All 29 checks / 30 techniques listed below |
-| Native x64 BOF v2.1 | Iterations 1–2 accepted | Token privileges, service permissions, unquoted service paths, writable `PATH` directories, AlwaysInstallElevated, and UAC policy observations |
+| Native x64 BOF v1.0 | Full implementation; VM acceptance in progress | All 29 check families, with credential authentication disabled by default |
 
-The BOF is a read-only native collector intended for authorized Windows assessment labs. It emits NDJSON records that are converted into the same BloodHound OpenGraph model used by the PowerShell collector. See [Native BOF](#native-bof-v21--iterations-12-accepted) for build, test, and conversion instructions.
+The BOF is a native collector intended for authorized Windows assessment labs. Its default mode is read-only and metadata-only. It emits NDJSON records that are converted into the same BloodHound OpenGraph model used by the PowerShell collector. Credential validation and local password-reuse testing are explicit opt-in modes because they create authentication events. See [Native BOF](#native-bof-v10) for build, test, and conversion instructions.
 
 > **Example:** Your current user can read the profile of another user on the machine. That profile contains cleartext credentials stored on their desktop for a third user. That third user has write permission to a service binary running as Administrator. No existing tool connects these dots. PrivHound does automatically.
 
@@ -117,9 +117,9 @@ When PrivHound discovers valid credentials for other local users (via GPP passwo
 
 1. `LogonUser` obtains a token handle for each discovered user
 2. `GetTokenInformation` extracts token privileges
-3. Windows access checks evaluate file and service ACLs against the discovered user's token
+3. Windows access checks evaluate file and service ACLs against the discovered user's token; the BOF temporarily impersonates that token while invoking native access checks
 4. Edges are created from the discovered user's node to any vulnerable resources they can access
-5. The token is closed — no impersonation occurs, no elevated privileges needed
+5. The token is closed and the BOF immediately reverts its thread token; no elevated privileges are required
 
 **What it checks for each discovered user:**
 
@@ -408,11 +408,11 @@ PrivHound/
 └── README.md
 ```
 
-## Native BOF v2.1 — Iterations 1–2 accepted
+## Native BOF v1.0
 
-The native BOF is under `bof/`. It is read-only: it enumerates configuration and access conditions but does not exploit findings, modify services, validate credentials, or establish persistence. The same C collection core builds both the BOF object and a standalone Windows harness, making it possible to test the collector without Cobalt Strike.
+The native BOF is under `bof/`. All 29 PowerShell check families now have native implementations. Safe mode enumerates configuration and access conditions without exploiting findings, modifying services, emitting plaintext secrets, or establishing persistence. The same C collection core builds both the BOF object and a standalone Windows harness, making it possible to test the collector without Cobalt Strike.
 
-Current BOF coverage:
+Native coverage includes:
 
 - Host, current-user, endpoint, and privilege-target graph nodes
 - Dangerous token privileges
@@ -421,10 +421,14 @@ Current BOF coverage:
 - Writable process `PATH` directories, with machine/user scope
 - AlwaysInstallElevated policy
 - UAC policy and filtered-token observations
+- Scheduled tasks, autoruns, writable service registry keys, writable program directories, and recovery commands
+- Credential Manager metadata, AutoLogon, GPP, Unattend, PowerShell history, and sensitive-file discovery
+- Cross-user profiles, opt-in credential validation, and delegated-token privilege analysis
+- JIT admin tools, Spooler policy, WSUS, SCCM, COM candidates, named pipes, cached credentials, WMI subscriptions, WebClient relay, and shadow copies
 
-The accepted Iteration 2 VM fixture produced **14 nodes, 22 edges, 13 findings, and 0 collector errors**. `WeakServicePermissions`, `UnquotedServicePaths`, `DLLHijacking`, `AlwaysInstallElevated`, and `UACBypass` passed their positive VM fixtures; `TokenPrivileges` is implemented and structurally validated. This is not yet full parity with the PowerShell collector.
+The complete safe collector builds as an x64 BOF and passes local NDJSON/OpenGraph validation with zero collector errors. Iterations 1–2 have passed positive VM fixtures; the new Iterations 3–6 collectors still need their full positive-VM and direct-loader acceptance pass.
 
-See [`bof/TESTING.md`](bof/TESTING.md) for the VM, harness, reference-collector, comparison, and authorized Beacon acceptance-test procedure. [`bof/PARITY.md`](bof/PARITY.md) tracks all 29 PowerShell checks and the remaining iterations.
+See [`bof/TESTING.md`](bof/TESTING.md) for the VM, harness, active-authentication safeguards, comparison, and authorized Beacon acceptance procedure. [`bof/PARITY.md`](bof/PARITY.md) tracks implementation and acceptance separately.
 
 From an x64 Native Tools Command Prompt for Visual Studio:
 
@@ -444,6 +448,13 @@ New-Item -ItemType Directory -Path C:\PrivHoundTest -Force | Out-Null
 .\tests\Validate-PrivHoundOutput.ps1 `
     -NdjsonPath C:\PrivHoundTest\bof.ndjson `
     -OpenGraphPath C:\PrivHoundTest\bof.json
+```
+
+Credential authentication is off by default. In the disposable lab, `--validate-credentials` tests only the claimed username; `--spray-credentials` also performs local password-reuse testing and can trigger account lockout:
+
+```powershell
+.\bof\build\privhound_harness.exe --validate-credentials -o C:\PrivHoundTest\validated.ndjson
+.\bof\build\privhound_harness.exe --spray-credentials -o C:\PrivHoundTest\spray.ndjson
 ```
 
 The converted `bof.json` is the file to upload through BloodHound's **Administration → File Ingest** page or `bh_upload.py`.

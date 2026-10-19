@@ -20,6 +20,9 @@ typedef struct _PH_GRAPH {
     char identity[512];
     char sid[192];
     BOOL is_admin;
+    BOOL validate_credentials;
+    BOOL spray_credentials;
+    BOOL credential_context;
     char current_user_id[33];
     char system_id[33];
     char admin_id[33];
@@ -28,9 +31,12 @@ typedef struct _PH_GRAPH {
     unsigned int edge_count;
     unsigned int finding_count;
     unsigned int error_count;
+    void *seen_nodes;
+    void *seen_edges;
 } PH_GRAPH;
 
 void ph_graph_init(PH_GRAPH *graph, PH_EMIT_FN emit, void *context);
+void ph_graph_dispose(PH_GRAPH *graph);
 void ph_collect(PH_GRAPH *graph);
 
 void ph_zero(void *buffer, int length);

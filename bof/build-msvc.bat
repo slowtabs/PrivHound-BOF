@@ -22,7 +22,7 @@ if errorlevel 1 exit /b 1
 pushd "%~dp0build"
 cl.exe /nologo /TC /O2 /W3 /wd4996 /DWIN32_LEAN_AND_MEAN /I"%~dp0include" ^
   "%~dp0src\ph_graph.c" "%~dp0src\ph_checks.c" "%~dp0tests\harness.c" ^
-  /Fe"privhound_harness.exe" /link /INCREMENTAL:NO Advapi32.lib Ntdll.lib
+  /Fe"privhound_harness.exe" /link /INCREMENTAL:NO Advapi32.lib Ntdll.lib Ole32.lib OleAut32.lib Netapi32.lib Crypt32.lib Wlanapi.lib
 if errorlevel 1 (
   popd
   exit /b 1

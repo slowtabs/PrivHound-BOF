@@ -43,7 +43,8 @@ if ($Target -in @('All','Bof')) {
 
 if ($Target -in @('All','Harness')) {
     $harness = Join-Path $Build 'privhound_harness.exe'
-    & $gcc @common '-DPH_HARNESS' $sources (Join-Path $Tests 'harness.c') '-ladvapi32' '-lntdll' '-o' $harness
+    & $gcc @common '-DPH_HARNESS' $sources (Join-Path $Tests 'harness.c') `
+        '-ladvapi32' '-lntdll' '-lole32' '-loleaut32' '-lnetapi32' '-lcrypt32' '-lwlanapi' '-o' $harness
     if ($LASTEXITCODE -ne 0) { throw 'Harness compilation failed' }
     Write-Host "Built $harness" -ForegroundColor Green
 }

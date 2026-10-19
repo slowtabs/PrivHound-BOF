@@ -56,6 +56,45 @@ foreach ($node in $nodes.Values) {
         $idType = 'uac'
         $idName = if ([string]$node.properties.name -match '^UAC:DISABLED@') { 'LUA_disabled' } else { 'NoPrompt' }
     }
+    elseif ($node.kinds -contains 'PHScheduledTask') { $idType = 'task'; $idName = [string]$node.properties.task_name }
+    elseif ($node.kinds -contains 'PHAutoRun') {
+        $idType = 'autorun'
+        $idName = "$($node.properties.value_name)_$($node.properties.reg_key)"
+    }
+    elseif ($node.kinds -contains 'PHWritableRegKey') { $idType = 'regservice'; $idName = [string]$node.properties.service }
+    elseif ($node.kinds -contains 'PHWritableProgramDir') { $idType = 'progdir'; $idName = [string]$node.properties.directory }
+    elseif ($node.kinds -contains 'PHStoredCredential') {
+        $idType = 'cred'
+        if ($node.properties.source -eq 'WinlogonAutoLogon') { $idName = 'autologon' }
+        else { $idName = 'cmdkey_' + (([string]$node.properties.target) -replace '[^a-zA-Z0-9_\-]','_') }
+    }
+    elseif ($node.kinds -contains 'PHGPPPassword') { $idType = 'gpp'; $idName = [string]$node.properties.file_path }
+    elseif ($node.kinds -contains 'PHUnattendFile') { $idType = 'unattend'; $idName = ([string]$node.properties.file_path).ToLowerInvariant() }
+    elseif ($node.kinds -contains 'PHPSHistory') {
+        $idType = 'pshist'
+        $idName = if ($node.properties.source -eq 'Transcription') { 'Transcripts' } else { 'ConsoleHost_history' }
+    }
+    elseif ($node.kinds -contains 'PHSensitiveFile') { $idType = 'sensfile'; $idName = [string]$node.properties.file_path }
+    elseif ($node.kinds -contains 'PHUserProfile') { $idType = 'userprofile'; $idName = [string]$node.properties.username }
+    elseif ($node.kinds -contains 'PHJITAdminTool') { $idType = 'jitadmin'; $idName = [string]$node.properties.tool_name }
+    elseif ($node.kinds -contains 'PHPrintSpooler') { $idType = 'printspooler'; $idName = 'Spooler' }
+    elseif ($node.kinds -contains 'PHWSUSConfig') { $idType = 'wsus'; $idName = 'WSUSConfig' }
+    elseif ($node.kinds -contains 'PHCOMHijack') { $idType = 'comhijack'; $idName = [string]$node.properties.clsid }
+    elseif ($node.kinds -contains 'PHNamedPipe') { $idType = 'namedpipe'; $idName = [string]$node.properties.pipe_name }
+    elseif ($node.kinds -contains 'PHCachedCreds') {
+        $idType = 'cachedcreds'
+        if ($node.properties.source -eq 'CachedLogonsCount') { $idName = 'DCC2' }
+        elseif ($node.properties.cache_id) { $idName = [string]$node.properties.cache_id }
+        else { $idName = ([string]$node.properties.name -replace '^CACHED:[^:]+:','' -replace '@[^@]+$','') }
+    }
+    elseif ($node.kinds -contains 'PHWebClientRelay') { $idType = 'webclientrelay'; $idName = [string]$node.properties.hostname }
+    elseif ($node.kinds -contains 'PHSCCMCredential') {
+        $idType = 'sccmcred'
+        $idName = if ($node.properties.source -eq 'CCM_NetworkAccessAccount') { 'NAA' } else { 'TaskSequence' }
+    }
+    elseif ($node.kinds -contains 'PHWMISubscription') { $idType = 'wmisub'; $idName = [string]$node.properties.consumer_name }
+    elseif ($node.kinds -contains 'PHShadowCopy') { $idType = 'shadowcopy'; $idName = [string]$node.properties.shadow_path }
+    elseif ($node.kinds -contains 'PHLocalUser') { $idType = 'localuser'; $idName = [string]$node.properties.username }
     if ($idType -and $node.properties.hostname -and $idName) {
         $expectedId = Get-PHExpectedId ([string]$node.properties.hostname) $idType $idName
         if ([string]$node.id -cne $expectedId) { throw "Node ID parity failure for $idType '$idName': expected $expectedId, got $($node.id)" }
